@@ -1,6 +1,6 @@
 // # path: src/components/ModelEditor.tsx
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useId, cloneElement, isValidElement } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import IconWrench from "~icons/mdi/wrench";
 import IconFileCode from "~icons/mdi/file-code-outline";
 import IconJson from "~icons/mdi/code-json";
+import { Check, Copy, Download } from "lucide-react";
 
 import {
   createDefaultFormState,
@@ -23,18 +24,28 @@ import {
 
 const FieldRow: React.FC<
   React.PropsWithChildren<{ label: string; description?: string }>
-> = ({ label, description, children }) => (
-  <div className="space-y-1">
-    <Label className="text-xs font-medium">{label}</Label>
-    {description ? (
-      <p className="text-[10px] text-muted-foreground">{description}</p>
-    ) : null}
-    {children}
-  </div>
-);
+> = ({ label, description, children }) => {
+  const id = useId();
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs font-medium">
+        {label}
+      </Label>
+      {description ? (
+        <p className="text-[10px] text-muted-foreground">{description}</p>
+      ) : null}
+      {isValidElement(children)
+        ? cloneElement(children, { id } as any)
+        : children}
+    </div>
+  );
+};
 
 const ModelEditor: React.FC = () => {
   const [form, setForm] = useState<ModelFormState>(createDefaultFormState);
+  const [copiedField, setCopiedField] = useState<"yaml" | "manifest" | null>(
+    null
+  );
 
   const modelYaml = useMemo(() => generateModelYaml(form), [form]);
   const manifestJson = useMemo(() => generateManifestJson(form), [form]);
@@ -46,12 +57,26 @@ const ModelEditor: React.FC = () => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleCopy = async (text: string) => {
+  const handleCopy = async (text: string, field: "yaml" | "manifest") => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch {
-      // no-op; clipboard may be unavailable in some environments
+      // fallback or error handling
     }
+  };
+
+  const handleDownload = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -322,33 +347,58 @@ const ModelEditor: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-
       {/* Right: code outputs */}
       <div className="space-y-4">
         <Card className="h-full">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div className="flex items-center gap-2">
-              <IconFileCode className="h-4 w-4 text-primary" />
-              <CardTitle className="text-sm font-semibold">
-                Generated files
-              </CardTitle>
-            </div>
+            {/* ... Title ... */}
             <div className="flex gap-2">
+              {/* Download Buttons */}
               <Button
-                size="xs"
+                size="sm"
                 variant="outline"
                 className="h-7 px-2 text-[11px]"
-                onClick={() => handleCopy(modelYaml)}
+                onClick={() => handleDownload(modelYaml, "model.yaml")}
+                title="Download model.yaml"
               >
-                Copy model.yaml
+                <Download className="h-3 w-3" />
               </Button>
               <Button
-                size="xs"
+                size="sm"
                 variant="outline"
                 className="h-7 px-2 text-[11px]"
-                onClick={() => handleCopy(manifestJson)}
+                onClick={() => handleDownload(manifestJson, "manifest.json")}
+                title="Download manifest.json"
               >
-                Copy manifest.json
+                <Download className="h-3 w-3" />
+              </Button>
+
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => handleCopy(modelYaml, "yaml")}
+              >
+                {copiedField === "yaml" ? (
+                  <Check className="mr-1 h-3 w-3" />
+                ) : (
+                  <Copy className="mr-1 h-3 w-3" />
+                )}
+                {copiedField === "yaml" ? "Copied" : "Copy model.yaml"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => handleCopy(manifestJson, "manifest")}
+              >
+                {copiedField === "manifest" ? (
+                  <Check className="mr-1 h-3 w-3" />
+                ) : (
+                  <Copy className="mr-1 h-3 w-3" />
+                )}
+                {copiedField === "manifest" ? "Copied" : "Copy manifest.json"}
               </Button>
             </div>
           </CardHeader>
